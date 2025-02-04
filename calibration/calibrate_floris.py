@@ -35,20 +35,57 @@ def setup_floris_yaml(input_file,setup_params,output_file = None):
 
 class FLORIS_Optimizer:
 
-    def __init__(self,floris_models,calibration_params,target_data,calibration_bounds=None):
+    def __init__(self,floris_models,calibration_params,target_data,calibration_bounds=None,turbine_calibration_params = None,turbine_calibration_bounds = None):
+
         self.floris_models = floris_models
         self.calibration_params = calibration_params
+        self.turbine_calibration_params = turbine_calibration_params
         self.cases = floris_models.keys()
         self.num_cases = len(self.cases)
         self.target_data_dict = target_data 
         self.get_target_data()
+        
+        if self.turbine_calibration_params != None:
+            self.turbine_files = {}
+            for case_iter, case in enumerate(self.cases):
+                floris_model = self.floris_models[case]
+                floris_model_farm = floris_model.core.farm
+                self.turbine_files[case] = {}
+                for t in floris_model_farm.turbine_type:
+                    self.turbine_files[case][t] = None
+                    if t in self.turbine_calibration_params.keys():
+                        internal_fn = (floris_model_farm.internal_turbine_library / t).with_suffix(".yaml")
+                        external_fn = (floris_model_farm.turbine_library_path / t).with_suffix(".yaml")
+                        in_internal = internal_fn.exists()
+                        in_external = external_fn.exists()
+                        if in_internal:
+                            full_path = internal_fn
+                        elif in_external:
+                            full_path = external_fn
+                        self.turbine_files[case][t] = full_path
+
         self.x0 = np.asarray(self.calibration_dict_to_array(calibration_params))
+        self.num_params = []
         if calibration_bounds == None:
             self.bounds = []
             for i in range(len(self.x0)):
                 self.bounds.append((None,None))
         else:
             self.bounds = self.calibration_dict_to_array(calibration_bounds)
+        self.num_params.append(len(self.x0)) #number of wake parameters
+        
+        if self.turbine_calibration_params != None:
+            for titer, t in enumerate(self.turbine_calibration_params.keys()):
+                x0 = np.asarray(self.calibration_dict_to_array(self.turbine_calibration_params[t]))
+                self.num_params.append(len(x0) + self.num_params[-1])
+                self.x0 = np.concatenate((self.x0, x0))
+
+                if turbine_calibration_bounds == None or turbine_calibration_bounds[t] == None:
+                    for i in range(len(self.x0)-self.num_params[0]):
+                        self.bounds.append((None,None))
+                else:
+                    self.bounds += self.calibration_dict_to_array(turbine_calibration_bounds[t])
+
         return
 
     def optimize(self,maxiter=1000):
@@ -61,7 +98,10 @@ class FLORIS_Optimizer:
         return MLE
 
     def cost_function(self,x):
-        self.calibration_params = self.calibration_array_to_dict(self.calibration_params,x)
+        self.calibration_params = self.calibration_array_to_dict(self.calibration_params,x[0:self.num_params[0]])
+        if self.turbine_calibration_params != None:
+            for titer, t in enumerate(self.turbine_calibration_params.keys()):
+                self.turbine_calibration_params[t] = self.calibration_array_to_dict(self.turbine_calibration_params[t],x[self.num_params[titer]:self.num_params[titer+1]])
         #try:
         obs = self.run_floris_models()
         llhood = 0
@@ -87,6 +127,10 @@ class FLORIS_Optimizer:
         for case_iter, case in enumerate(self.cases):
             floris_model = self.floris_models[case]
             self.modify_yaml(floris_model.configuration,self.calibration_params)
+            if self.turbine_calibration_params != None:
+                for t in self.turbine_calibration_params.keys():
+                    self.modify_yaml(self.turbine_files[case][t],self.turbine_calibration_params[t])
+
             self.floris_models[case] = FlorisModel(floris_model.configuration)
             self.floris_models[case].run()
             qoi = self.target_data_dict[case][0]
@@ -193,6 +237,17 @@ if __name__ == "__main__":
 
     calibration_bounds = {
         'wake.wake_velocity_parameters.empirical_gauss.wake_expansion_rates': [(0.0,1.0),(0.0,1.0)],
+    }
+
+    #example of including turbine parameters in calibraiton
+    turbine_calibration_params= {}
+    turbine_calibration_params['iea_15MW'] = {
+        'TSR': 8,
+    }
+
+    turbine_calibration_bounds= {}
+    turbine_calibration_bounds['iea_15MW'] = {
+        'TSR': (0,20),
     }
 
     target_data = {}
