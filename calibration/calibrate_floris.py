@@ -44,25 +44,39 @@ class FLORIS_Optimizer:
         self.num_cases = len(self.cases)
         self.target_data_dict = target_data 
         self.get_target_data()
+
+        self.operation_model = {}
+        self.awc_modes = {}
+        self.awc_amplitudes = {}
+        self.num_turbines = {}
+        for case_iter, case in enumerate(self.cases):
+            floris_model = self.floris_models[case]
+            #TODO: THIS MAY FAIL! 
+            self.num_turbines[case] = len(floris_model.core.farm.layout_x)
+            turbine_types = floris_model.core.farm.turbine_type
+            self.operation_model[case] = []
+            for turbine_type in turbine_types:
+                self.operation_model[case].append(turbine_type['operation_model'])
+            self.awc_modes[case] = floris_model.core.farm.awc_modes
+            self.awc_amplitudes[case] = floris_model.core.farm.awc_amplitudes
         
         if self.turbine_calibration_params != None:
             self.turbine_files = {}
-            for case_iter, case in enumerate(self.cases):
-                floris_model = self.floris_models[case]
-                floris_model_farm = floris_model.core.farm
-                self.turbine_files[case] = {}
-                for t in floris_model_farm.turbine_type:
-                    self.turbine_files[case][t] = None
-                    if t in self.turbine_calibration_params.keys():
-                        internal_fn = (floris_model_farm.internal_turbine_library / t).with_suffix(".yaml")
-                        external_fn = (floris_model_farm.turbine_library_path / t).with_suffix(".yaml")
-                        in_internal = internal_fn.exists()
-                        in_external = external_fn.exists()
-                        if in_internal:
-                            full_path = internal_fn
-                        elif in_external:
-                            full_path = external_fn
-                        self.turbine_files[case][t] = full_path
+            for t in self.turbine_calibration_params.keys():
+                self.turbine_files[t] = None
+                for case_iter, case in enumerate(self.cases):
+                    floris_model = self.floris_models[case]
+                    internal_fn = (floris_model.core.farm.internal_turbine_library / t).with_suffix(".yaml")
+                    external_fn = (floris_model.core.farm.turbine_library_path / t).with_suffix(".yaml")
+                    in_internal = internal_fn.exists()
+                    in_external = external_fn.exists()
+                    if in_internal:
+                        self.turbine_files[t] = internal_fn
+                    elif in_external:
+                        self.turbine_files[t] = external_fn
+                if self.turbine_files[t] == None:
+                    print("Error: Turbine file for type ",t," not found.")
+                    sys.exit()
 
         self.x0 = np.asarray(self.calibration_dict_to_array(calibration_params))
         self.num_params = []
@@ -102,14 +116,20 @@ class FLORIS_Optimizer:
         if self.turbine_calibration_params != None:
             for titer, t in enumerate(self.turbine_calibration_params.keys()):
                 self.turbine_calibration_params[t] = self.calibration_array_to_dict(self.turbine_calibration_params[t],x[self.num_params[titer]:self.num_params[titer+1]])
-        #try:
+
         obs = self.run_floris_models()
         llhood = 0
         scaling = 1.0/1000.0
         for case_iter , case in enumerate(self.cases):
-            llhood += 0.5 * np.sum((obs[case]*scaling - self.target_data[case]) ** 2)
-        #except Exception:
-        #    llhood = -np.inf
+            if 'awc' in self.operation_model[case]:
+                floris_model = self.floris_models[case]
+                baseline_array = ['baseline']*self.num_turbines[case]
+                floris_model.set(awc_modes=np.array([baseline_array]),awc_amplitudes=np.array(self.awc_amplitudes[case]))
+                floris_model.run()
+                baseline_results = floris_model.get_turbine_powers()
+                llhood += 0.5 * np.sum(((obs[case]-baseline_results)*scaling - self.target_data[case]) ** 2)
+            else:
+                llhood += 0.5 * np.sum((obs[case]*scaling - self.target_data[case]) ** 2)
         return llhood
 
     def get_target_data(self):
@@ -124,18 +144,20 @@ class FLORIS_Optimizer:
 
     def run_floris_models(self):
         results = {}
+        if self.turbine_calibration_params != None:
+            for t in self.turbine_calibration_params.keys():
+                self.modify_yaml(self.turbine_files[t],self.turbine_calibration_params[t])
+
         for case_iter, case in enumerate(self.cases):
             floris_model = self.floris_models[case]
             self.modify_yaml(floris_model.configuration,self.calibration_params)
-            if self.turbine_calibration_params != None:
-                for t in self.turbine_calibration_params.keys():
-                    self.modify_yaml(self.turbine_files[case][t],self.turbine_calibration_params[t])
-
-            self.floris_models[case] = FlorisModel(floris_model.configuration)
-            self.floris_models[case].run()
+            floris_model = FlorisModel(floris_model.configuration)
+            floris_model.set_operation_model(self.operation_model[case])
+            floris_model.set(awc_modes=np.array(self.awc_modes[case]),awc_amplitudes=np.array(self.awc_amplitudes[case]))
+            floris_model.run()
             qoi = self.target_data_dict[case][0]
             if qoi == 'turbine_power':
-                results[case] = self.floris_models[case].get_turbine_powers()
+                results[case] = floris_model.get_turbine_powers()
         return results
 
     def modify_yaml(self,input_file,params,output_file = None):
