@@ -45,7 +45,7 @@ class WakeInducedMixing(BaseModel):
                 " from the atmospheric turbulence intensity has not been"+\
                 " vetted. To avoid this warning, set atmospheric_ti_gain=0."+\
                 " in the FLORIS input yaml."
-            self.logger.warning(nonzero_err_msg, stack_info=True)
+            #self.logger.warning(nonzero_err_msg, stack_info=True)
 
     def prepare_function(self) -> dict:
         pass

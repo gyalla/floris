@@ -13,7 +13,6 @@ from floris.core import (
     Turbine,
 )
 from floris.core.wake_velocity.gauss import gaussian_function
-from floris.type_dec import floris_float_type
 from floris.utilities import (
     cosd,
     sind,
@@ -293,13 +292,13 @@ def awc_added_wake_mixing(
     awc_wake_exp,
     awc_wake_denominator
 ):
+
     # Drop surplus (grid) dimensions
     awc_amplitude_i = awc_amplitude_i[:,:,0,0]
     awc_mode_i = awc_mode_i[:,:,0,0]
 
-    # TODO: Add TI in the mix, finetune amplitude/freq effect
-    awc_mixing_factor = np.zeros_like(awc_amplitude_i, dtype=floris_float_type)
-    helix_mask = awc_mode_i == 'helix'
+    awc_mixing_factor = np.zeros_like(awc_amplitude_i,dtype=float)
+    helix_mask = (awc_mode_i == 'helix')
 
     awc_mixing_factor[helix_mask] = (
         awc_amplitude_i[helix_mask]**awc_wake_exp/awc_wake_denominator

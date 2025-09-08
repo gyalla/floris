@@ -1747,6 +1747,7 @@ class WindTIRose(WindDataBase):
         wd_step=15.0,
         wind_rose_var_step=None,
         legend_kwargs={"label": "Wind speed [m/s]"},
+        fontsize=24
     ):
         """
         This method creates a wind rose plot showing the frequency of occurrence
@@ -1827,16 +1828,20 @@ class WindTIRose(WindDataBase):
 
         # Configure the plot
         try:
-            ax.figure.colorbar(sm_wv, ax=ax, **legend_kwargs)
+            cbar = ax.figure.colorbar(sm_wv, ax=ax, **legend_kwargs)
             ax.figure.tight_layout()
+            cbar.set_label(legend_kwargs['label'], fontsize=fontsize)  # Set color bar label font size
+            cbar.ax.tick_params(labelsize=fontsize)  # Set color bar tick label font size
         except TypeError:
-            ax.legend(reversed(rects), var_bins, **legend_kwargs)
+            ax.legend(reversed(rects), var_bins, **legend_kwargs,fontsize=fontsize)
             ax.figure.get_children()[-1].remove() # Remove the empty colorbar
         ax.set_theta_direction(-1)
         ax.set_theta_offset(np.pi / 2.0)
         ax.set_theta_zero_location("N")
         ax.set_xticks(np.arange(0, 2 * np.pi, np.pi / 4))
-        ax.set_xticklabels(["N", "NE", "E", "SE", "S", "SW", "W", "NW"])
+        ax.set_xticklabels(["N", "NE", "E", "SE", "S", "SW", "W", "NW"],fontsize=fontsize)
+        ax.tick_params(labelsize=fontsize)  # Set radial and angular tick label font size
+
 
         return ax
 

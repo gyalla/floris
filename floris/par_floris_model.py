@@ -351,19 +351,6 @@ class ParFlorisModel(FlorisModel):
             return super()._get_turbine_powers()
 
     @property
-    def secondary_init_kwargs(self):
-        """
-        ParFlorisModel secondary keyword arguments (after configuration).
-        """
-        return {
-            "interface": self.interface,
-            "max_workers": self.max_workers,
-            "n_wind_condition_splits": self.n_wind_condition_splits,
-            "return_turbine_powers_only": self.return_turbine_powers_only,
-            "print_timings": self.print_timings
-        }
-
-    @property
     def fmodel(self):
         """
         Raise deprecation warning.

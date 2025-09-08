@@ -520,7 +520,10 @@ class AWCTurbine(BaseOperationModel):
     """
 
     def AWC_model(a, b, c, base_values, awc_amplitudes):
-            return base_values * (1 - (b + c*base_values)*awc_amplitudes**a)
+            if a == 0:
+                return base_values * (b*awc_amplitudes**c + 1.0)
+            else:
+                return base_values * (1 - (b + c*base_values)*awc_amplitudes**a)
 
     def power(
         power_thrust_table: dict,
@@ -551,13 +554,12 @@ class AWCTurbine(BaseOperationModel):
         powers = base_powers.copy()
 
         helix_mask = (awc_modes == 'helix')
-        if np.any(np.isclose(base_powers[helix_mask]/1000,np.max(power_thrust_table['power']))):
-            raise UserWarning(
-                'The selected wind speed is above or near rated wind speed. '
-                '`AWCTurbine` operation model is not designed '
-                'or verified for above-rated conditions.'
-            )
-
+        #if np.any(np.isclose(base_powers[helix_mask]/1000,np.max(power_thrust_table['power']))):
+        #    raise UserWarning(
+        #        'The selected wind speed is above or near rated wind speed. '
+        #        '`AWCTurbine` operation model is not designed '
+        #        'or verified for above-rated conditions.'
+        #    )
         awc_powers = AWCTurbine.AWC_model(
             power_thrust_table['helix_a'],
             power_thrust_table['helix_power_b'],
